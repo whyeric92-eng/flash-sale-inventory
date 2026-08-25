@@ -34,3 +34,6 @@ build/
 
 ### Personal notes ###
 LEARNING.md
+
+### Secrets ###
+.env
