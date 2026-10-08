@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import com.flashsale.inventory.dto.ProductRequest;
 import com.flashsale.inventory.entity.Product;
+import com.flashsale.inventory.exception.NotFoundException;
 import com.flashsale.inventory.repository.ProductRepository;
 
 @Service
@@ -18,7 +19,8 @@ public class ProductService {
     }
 
     public Product getProduct(Long id) {
-        return productRepository.findById(id).orElseThrow();
+        return productRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Product " + id + " not found"));
     }
 
     public List<Product> getAllProducts() {
@@ -38,6 +40,9 @@ public class ProductService {
     }
 
     public void deleteProduct(Long id) {
+        if (!productRepository.existsById(id)) {
+            throw new NotFoundException("Product " + id + " not found");
+        }
         productRepository.deleteById(id);
     }
 }

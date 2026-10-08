@@ -1,13 +1,13 @@
 package com.flashsale.inventory.service;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
 
 import com.flashsale.inventory.dto.AuthRequest;
 import com.flashsale.inventory.dto.AuthResponse;
 import com.flashsale.inventory.entity.User;
+import com.flashsale.inventory.exception.ConflictException;
+import com.flashsale.inventory.exception.InvalidCredentialsException;
 import com.flashsale.inventory.repository.UserRepository;
 import com.flashsale.inventory.security.JwtService;
 
@@ -26,7 +26,7 @@ public class AuthService {
 
     public void register(AuthRequest request) {
         if (userRepository.existsByUsername(request.username())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Username already taken");
+            throw new ConflictException("Username already taken");
         }
 
         User user = new User();
@@ -40,7 +40,7 @@ public class AuthService {
         // Same error for unknown user and wrong password, so the endpoint can't be used to probe usernames.
         User user = userRepository.findByUsername(request.username())
                 .filter(u -> passwordEncoder.matches(request.password(), u.getPasswordHash()))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid username or password"));
+                .orElseThrow(() -> new InvalidCredentialsException("Invalid username or password"));
 
         return new AuthResponse(jwtService.generateToken(user.getUsername()));
     }

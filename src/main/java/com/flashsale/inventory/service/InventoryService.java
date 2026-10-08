@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 
 import com.flashsale.inventory.dto.InventoryRequest;
 import com.flashsale.inventory.entity.Inventory;
+import com.flashsale.inventory.exception.ConflictException;
+import com.flashsale.inventory.exception.NotFoundException;
 import com.flashsale.inventory.repository.InventoryRepository;
 
 @Service
@@ -20,7 +22,8 @@ public class InventoryService {
     }
 
     public Inventory getInventory(Long id) {
-        return inventoryRepository.findById(id).orElseThrow();
+        return inventoryRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inventory " + id + " not found"));
     }
 
     public List<Inventory> getAllInventory() {
@@ -35,16 +38,20 @@ public class InventoryService {
     }
 
     public void decreaseStock(Long productId, int quantity) {
-        Inventory inventory = inventoryRepository.findByProductId(productId).orElseThrow();
+        Inventory inventory = inventoryRepository.findByProductId(productId)
+                .orElseThrow(() -> new NotFoundException("Inventory for product " + productId + " not found"));
         int remaining = inventory.getStockQuantity() - quantity;
         if (remaining < 0) {
-            throw new IllegalStateException("Insufficient stock");
+            throw new ConflictException("Insufficient stock");
         }
         inventory.setStockQuantity(remaining);
         inventoryRepository.save(inventory);
     }
 
     public void deleteInventory(Long id) {
+        if (!inventoryRepository.existsById(id)) {
+            throw new NotFoundException("Inventory " + id + " not found");
+        }
         inventoryRepository.deleteById(id);
     }
 }
