@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.flashsale.inventory.dto.ProductRequest;
 import com.flashsale.inventory.entity.Product;
 import com.flashsale.inventory.repository.ProductRepository;
 
@@ -24,11 +25,15 @@ public class ProductService {
         return productRepository.findAll();
     }
 
-    public Product createProduct(Product product) {
+    public Product createProduct(ProductRequest request) {
+        Product product = new Product();
+        product.setProductName(request.productName());
         return productRepository.save(product);
     }
 
-    public Product updateProduct(Product product) {
+    public Product updateProduct(Long id, ProductRequest request) {
+        Product product = getProduct(id);
+        product.setProductName(request.productName());
         return productRepository.save(product);
     }
 

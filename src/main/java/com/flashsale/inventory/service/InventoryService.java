@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.stereotype.Service;
 
+import com.flashsale.inventory.dto.InventoryRequest;
 import com.flashsale.inventory.entity.Inventory;
 import com.flashsale.inventory.repository.InventoryRepository;
 
@@ -11,9 +12,11 @@ import com.flashsale.inventory.repository.InventoryRepository;
 public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
+    private final ProductService productService;
 
-    public InventoryService(InventoryRepository inventoryRepository) {
+    public InventoryService(InventoryRepository inventoryRepository, ProductService productService) {
         this.inventoryRepository = inventoryRepository;
+        this.productService = productService;
     }
 
     public Inventory getInventory(Long id) {
@@ -24,7 +27,10 @@ public class InventoryService {
         return inventoryRepository.findAll();
     }
 
-    public Inventory createInventory(Inventory inventory) {
+    public Inventory createInventory(InventoryRequest request) {
+        Inventory inventory = new Inventory();
+        inventory.setProduct(productService.getProduct(request.productId()));
+        inventory.setStockQuantity(request.stockQuantity());
         return inventoryRepository.save(inventory);
     }
 
