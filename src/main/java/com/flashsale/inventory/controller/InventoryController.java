@@ -11,8 +11,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.flashsale.inventory.dto.InventoryRequest;
 import com.flashsale.inventory.entity.Inventory;
 import com.flashsale.inventory.service.InventoryService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/inventory")
@@ -35,8 +38,8 @@ public class InventoryController {
     }
 
     @PostMapping
-    public Inventory createInventory(@RequestBody Inventory inventory) {
-        return inventoryService.createInventory(inventory);
+    public Inventory createInventory(@Valid @RequestBody InventoryRequest request) {
+        return inventoryService.createInventory(request);
     }
 
     @PostMapping("/{productId}/decrease")
