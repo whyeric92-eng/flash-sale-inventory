@@ -2,6 +2,7 @@ package com.flashsale.inventory.service;
 
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.flashsale.inventory.dto.AuthRequest;
 import com.flashsale.inventory.dto.AuthResponse;
@@ -12,6 +13,7 @@ import com.flashsale.inventory.repository.UserRepository;
 import com.flashsale.inventory.security.JwtService;
 
 @Service
+@Transactional(readOnly = true)
 public class AuthService {
 
     private final UserRepository userRepository;
@@ -24,6 +26,7 @@ public class AuthService {
         this.jwtService = jwtService;
     }
 
+    @Transactional
     public void register(AuthRequest request) {
         if (userRepository.existsByUsername(request.username())) {
             throw new ConflictException("Username already taken");
