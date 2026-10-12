@@ -2,7 +2,6 @@ package com.flashsale.inventory.controller;
 
 import java.util.List;
 
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,10 +38,5 @@ public class OrderController {
     @PostMapping
     public Order createOrder(@Valid @RequestBody CreateOrderRequest request) {
         return orderService.createOrder(request.productId(), request.quantity());
-    }
-
-    @DeleteMapping("/{id}")
-    public void deleteOrder(@PathVariable Long id) {
-        orderService.deleteOrder(id);
     }
 }

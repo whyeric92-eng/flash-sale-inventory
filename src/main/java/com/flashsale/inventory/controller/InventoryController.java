@@ -8,7 +8,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.flashsale.inventory.dto.InventoryRequest;
@@ -40,11 +39,6 @@ public class InventoryController {
     @PostMapping
     public Inventory createInventory(@Valid @RequestBody InventoryRequest request) {
         return inventoryService.createInventory(request);
-    }
-
-    @PostMapping("/{productId}/decrease")
-    public void decreaseStock(@PathVariable Long productId, @RequestParam Integer quantity) {
-        inventoryService.decreaseStock(productId, quantity);
     }
 
     @DeleteMapping("/{id}")
