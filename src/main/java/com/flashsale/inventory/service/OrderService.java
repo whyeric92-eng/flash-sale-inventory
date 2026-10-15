@@ -3,13 +3,16 @@ package com.flashsale.inventory.service;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.flashsale.inventory.entity.Order;
 import com.flashsale.inventory.entity.OrderStatus;
 import com.flashsale.inventory.entity.Product;
+import com.flashsale.inventory.exception.NotFoundException;
 import com.flashsale.inventory.repository.OrderRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class OrderService {
 
     private final OrderRepository orderRepository;
@@ -24,13 +27,15 @@ public class OrderService {
     }
 
     public Order getOrder(Long id) {
-        return orderRepository.findById(id).orElseThrow();
+        return orderRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Order " + id + " not found"));
     }
 
     public List<Order> getAllOrders() {
         return orderRepository.findAll();
     }
 
+    @Transactional
     public Order createOrder(Long productId, Integer quantity) {
         inventoryService.decreaseStock(productId, quantity);
 
@@ -42,9 +47,5 @@ public class OrderService {
         order.setStatus(OrderStatus.PENDING);
 
         return orderRepository.save(order);
-    }
-
-    public void deleteOrder(Long id) {
-        orderRepository.deleteById(id);
     }
 }

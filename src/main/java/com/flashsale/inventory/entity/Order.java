@@ -2,10 +2,13 @@ package com.flashsale.inventory.entity;
 
 import java.time.OffsetDateTime;
 
+import org.hibernate.annotations.Generated;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -21,7 +24,7 @@ public class Order {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
@@ -32,15 +35,12 @@ public class Order {
     @Column(name = "status", nullable = false)
     private OrderStatus status;
 
+    @Generated
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
     public Long getId() {
         return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
     }
 
     public Product getProduct() {

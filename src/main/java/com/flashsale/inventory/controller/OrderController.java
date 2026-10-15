@@ -2,16 +2,20 @@ package com.flashsale.inventory.controller;
 
 import java.util.List;
 
-import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.flashsale.inventory.entity.Order;
+import com.flashsale.inventory.dto.CreateOrderRequest;
+import com.flashsale.inventory.dto.OrderResponse;
 import com.flashsale.inventory.service.OrderService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/orders")
@@ -24,22 +28,20 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
-    public Order getOrder(@PathVariable Long id) {
-        return orderService.getOrder(id);
+    public OrderResponse getOrder(@PathVariable Long id) {
+        return OrderResponse.from(orderService.getOrder(id));
     }
 
     @GetMapping
-    public List<Order> getAllOrders() {
-        return orderService.getAllOrders();
+    public List<OrderResponse> getAllOrders() {
+        return orderService.getAllOrders().stream()
+                .map(OrderResponse::from)
+                .toList();
     }
 
     @PostMapping
-    public Order createOrder(@RequestParam Long productId, @RequestParam Integer quantity) {
-        return orderService.createOrder(productId, quantity);
-    }
-
-    @DeleteMapping("/{id}")
-    public void deleteOrder(@PathVariable Long id) {
-        orderService.deleteOrder(id);
+    @ResponseStatus(HttpStatus.CREATED)
+    public OrderResponse createOrder(@Valid @RequestBody CreateOrderRequest request) {
+        return OrderResponse.from(orderService.createOrder(request.productId(), request.quantity()));
     }
 }

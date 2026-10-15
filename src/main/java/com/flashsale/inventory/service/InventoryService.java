@@ -3,12 +3,16 @@ package com.flashsale.inventory.service;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.flashsale.inventory.dto.InventoryRequest;
 import com.flashsale.inventory.entity.Inventory;
+import com.flashsale.inventory.exception.ConflictException;
+import com.flashsale.inventory.exception.NotFoundException;
 import com.flashsale.inventory.repository.InventoryRepository;
 
 @Service
+@Transactional(readOnly = true)
 public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
@@ -20,13 +24,15 @@ public class InventoryService {
     }
 
     public Inventory getInventory(Long id) {
-        return inventoryRepository.findById(id).orElseThrow();
+        return inventoryRepository.findById(id)
+                .orElseThrow(() -> new NotFoundException("Inventory " + id + " not found"));
     }
 
     public List<Inventory> getAllInventory() {
         return inventoryRepository.findAll();
     }
 
+    @Transactional
     public Inventory createInventory(InventoryRequest request) {
         Inventory inventory = new Inventory();
         inventory.setProduct(productService.getProduct(request.productId()));
@@ -34,17 +40,23 @@ public class InventoryService {
         return inventoryRepository.save(inventory);
     }
 
+    @Transactional
     public void decreaseStock(Long productId, int quantity) {
-        Inventory inventory = inventoryRepository.findByProductId(productId).orElseThrow();
+        Inventory inventory = inventoryRepository.findByProductId(productId)
+                .orElseThrow(() -> new NotFoundException("Inventory for product " + productId + " not found"));
         int remaining = inventory.getStockQuantity() - quantity;
         if (remaining < 0) {
-            throw new IllegalStateException("Insufficient stock");
+            throw new ConflictException("Insufficient stock");
         }
         inventory.setStockQuantity(remaining);
         inventoryRepository.save(inventory);
     }
 
+    @Transactional
     public void deleteInventory(Long id) {
+        if (!inventoryRepository.existsById(id)) {
+            throw new NotFoundException("Inventory " + id + " not found");
+        }
         inventoryRepository.deleteById(id);
     }
 }
