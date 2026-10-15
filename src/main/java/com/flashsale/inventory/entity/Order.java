@@ -2,6 +2,8 @@ package com.flashsale.inventory.entity;
 
 import java.time.OffsetDateTime;
 
+import org.hibernate.annotations.Generated;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -33,6 +35,7 @@ public class Order {
     @Column(name = "status", nullable = false)
     private OrderStatus status;
 
+    @Generated
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
