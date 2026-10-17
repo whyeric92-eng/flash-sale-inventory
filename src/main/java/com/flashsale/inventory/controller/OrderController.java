@@ -3,6 +3,7 @@ package com.flashsale.inventory.controller;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,7 +42,8 @@ public class OrderController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public OrderResponse createOrder(@Valid @RequestBody CreateOrderRequest request) {
-        return OrderResponse.from(orderService.createOrder(request.productId(), request.quantity()));
+    public OrderResponse createOrder(@AuthenticationPrincipal Long userId,
+            @Valid @RequestBody CreateOrderRequest request) {
+        return OrderResponse.from(orderService.createOrder(userId, request.productId(), request.quantity()));
     }
 }
