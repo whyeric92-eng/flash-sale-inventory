@@ -28,6 +28,10 @@ public class Order {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
@@ -49,6 +53,14 @@ public class Order {
 
     public void setProduct(Product product) {
         this.product = product;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 
     public Integer getQuantity() {

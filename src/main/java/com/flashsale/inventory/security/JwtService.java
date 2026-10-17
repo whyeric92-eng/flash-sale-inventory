@@ -26,20 +26,22 @@ public class JwtService {
         this.parser = Jwts.parser().verifyWith(key).build();
     }
 
-    public String generateToken(String username) {
+    public String generateToken(Long userId) {
         Date now = new Date();
         return Jwts.builder()
-                .subject(username)
+                .subject(String.valueOf(userId))
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + expiration.toMillis()))
                 .signWith(key)
                 .compact();
     }
 
-    // Throws JwtException if the signature is invalid or the token has expired.
-    public String extractUsername(String token) {
-        return parser.parseSignedClaims(token)
+    // Throws JwtException if the signature is invalid or the token has expired,
+    // and NumberFormatException if the subject is not a user id (e.g. a pre-id token).
+    public Long extractUserId(String token) {
+        String subject = parser.parseSignedClaims(token)
                 .getPayload()
                 .getSubject();
+        return Long.parseLong(subject);
     }
 }
