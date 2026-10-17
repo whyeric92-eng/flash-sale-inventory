@@ -45,6 +45,6 @@ public class AuthService {
                 .filter(u -> passwordEncoder.matches(request.password(), u.getPasswordHash()))
                 .orElseThrow(() -> new InvalidCredentialsException("Invalid username or password"));
 
-        return new AuthResponse(jwtService.generateToken(user.getUsername()));
+        return new AuthResponse(jwtService.generateToken(user.getId()));
     }
 }
