@@ -29,13 +29,13 @@ public class OrderController {
     }
 
     @GetMapping("/{id}")
-    public OrderResponse getOrder(@PathVariable Long id) {
-        return OrderResponse.from(orderService.getOrder(id));
+    public OrderResponse getOrder(@AuthenticationPrincipal Long userId, @PathVariable Long id) {
+        return OrderResponse.from(orderService.getOrder(id, userId));
     }
 
     @GetMapping
-    public List<OrderResponse> getAllOrders() {
-        return orderService.getAllOrders().stream()
+    public List<OrderResponse> getMyOrders(@AuthenticationPrincipal Long userId) {
+        return orderService.getOrdersForUser(userId).stream()
                 .map(OrderResponse::from)
                 .toList();
     }

@@ -29,13 +29,14 @@ public class OrderService {
         this.productService = productService;
     }
 
-    public Order getOrder(Long id) {
-        return orderRepository.findById(id)
+    // Another user's order gives 404, not 403, so callers can't tell it exists.
+    public Order getOrder(Long id, Long userId) {
+        return orderRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new NotFoundException("Order " + id + " not found"));
     }
 
-    public List<Order> getAllOrders() {
-        return orderRepository.findAll();
+    public List<Order> getOrdersForUser(Long userId) {
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
     @Transactional
