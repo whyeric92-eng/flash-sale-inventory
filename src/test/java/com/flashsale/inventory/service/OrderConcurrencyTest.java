@@ -14,11 +14,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.springframework.context.annotation.Import;
 
+import com.flashsale.inventory.TestcontainersConfiguration;
 import com.flashsale.inventory.entity.Inventory;
 import com.flashsale.inventory.entity.Product;
 import com.flashsale.inventory.entity.User;
@@ -31,12 +29,8 @@ import com.flashsale.inventory.repository.UserRepository;
 // No @Transactional here: each thread must run and commit in its own transaction,
 // just like real concurrent requests.
 @SpringBootTest
-@Testcontainers
+@Import(TestcontainersConfiguration.class)
 class OrderConcurrencyTest {
-
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:16.4-alpine");
 
     @Autowired OrderService orderService;
     @Autowired UserRepository userRepository;
