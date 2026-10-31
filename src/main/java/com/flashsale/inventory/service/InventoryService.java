@@ -42,14 +42,14 @@ public class InventoryService {
 
     @Transactional
     public void decreaseStock(Long productId, int quantity) {
-        Inventory inventory = inventoryRepository.findByProductId(productId)
-                .orElseThrow(() -> new NotFoundException("Inventory for product " + productId + " not found"));
-        int remaining = inventory.getStockQuantity() - quantity;
-        if (remaining < 0) {
+        int updated = inventoryRepository.decreaseStockIfEnough(productId, quantity);
+        if (updated == 0) {
+            // 0 rows can mean "no stock left" or "no such product"; look it up only on this rare path.
+            if (!inventoryRepository.existsByProductId(productId)) {
+                throw new NotFoundException("Inventory for product " + productId + " not found");
+            }
             throw new ConflictException("Insufficient stock");
         }
-        inventory.setStockQuantity(remaining);
-        inventoryRepository.save(inventory);
     }
 
     @Transactional
