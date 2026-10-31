@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      # .env is gitignored, so CI has no JWT_SECRET. Generate a throwaway one per run.
+      - name: Generate JWT secret
+        run: echo "JWT_SECRET=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
+
+      # Testcontainers uses the Docker that ubuntu-latest runners come with.
+      - name: Run tests
+        run: ./mvnw -B test
