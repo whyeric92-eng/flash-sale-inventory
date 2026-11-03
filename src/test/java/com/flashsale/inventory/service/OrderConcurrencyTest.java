@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import com.flashsale.inventory.TestcontainersConfiguration;
 import com.flashsale.inventory.entity.Inventory;
@@ -37,6 +38,7 @@ class OrderConcurrencyTest {
     @Autowired ProductRepository productRepository;
     @Autowired InventoryRepository inventoryRepository;
     @Autowired OrderRepository orderRepository;
+    @Autowired StringRedisTemplate redis;
 
     @Test
     void concurrentOrdersDoNotOversell() throws Exception {
@@ -90,5 +92,8 @@ class OrderConcurrencyTest {
         assertThat(conflict.get()).as("orders rejected for low stock").isEqualTo(threads - stock);
         assertThat(stockLeft).as("stock left").isZero();
         assertThat(orderRepository.count()).as("orders saved").isEqualTo(stock);
+        // Redis started empty (inventory was saved directly, not via createInventory), so all
+        // threads raced to load it. A wrong load would overwrite decreases and leave this above 0.
+        assertThat(redis.opsForValue().get("stock:" + productId)).as("stock left in Redis").isEqualTo("0");
     }
 }

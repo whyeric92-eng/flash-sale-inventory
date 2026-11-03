@@ -1,4 +1,4 @@
-# Load-tests POST /orders and reconciles the result against the database.
+# Load-tests POST /orders and reconciles the result against the database and Redis.
 #
 # Usage:   .\scripts\load-test.ps1 -Concurrency 50 [-Requests 500] [-Stock 100]
 # Assumes: the app is running on :8080, user "tester" exists, and product 1
@@ -13,7 +13,9 @@ $ErrorActionPreference = 'Stop'
 
 $BaseUrl = 'http://localhost:8080'
 $Container = 'flash-sale-postgres'
+$RedisContainer = 'flash-sale-redis'
 $ProductId = 1
+$RedisKey = "stock:$ProductId"
 
 # SQL goes in through stdin: Windows PowerShell 5.1 strips the inner quotes
 # when a SQL string is passed to a native program as an argument.
@@ -24,6 +26,9 @@ function Invoke-Sql([string]$sql) {
 
 # 1. Reset
 Invoke-Sql "TRUNCATE orders RESTART IDENTITY; UPDATE inventory SET stock_quantity = $Stock WHERE product_id = $ProductId;" | Out-Null
+# Redis is a separate copy and must be reset too. SET (not DEL) models a sale whose stock was warmed up beforehand.
+docker exec $RedisContainer redis-cli SET $RedisKey $Stock | Out-Null
+if ($LASTEXITCODE -ne 0) { throw 'redis-cli failed' }
 
 # 2. Log in
 $auth = @{ username = 'tester'; password = 'password123' } | ConvertTo-Json
@@ -50,7 +55,7 @@ $codes = ($result.statusCodeDistribution.PSObject.Properties | Sort-Object Name 
 Write-Host "concurrency $Concurrency, requests $Requests, initial stock $Stock"
 Write-Host "  status codes: $codes"
 Write-Host "  sold:         $sold"
-Write-Host "  stock left:   $stockLeft"
+Write-Host "  stock left:   $stockLeft (Redis: $(docker exec $RedisContainer redis-cli GET $RedisKey))"
 Write-Host ('  rps:          {0:N0}' -f $result.summary.requestsPerSec)
 Write-Host ('  avg latency:  {0:N1} ms' -f ($result.summary.average * 1000))
 if ($oversold -gt 0) {
