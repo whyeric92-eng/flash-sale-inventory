@@ -17,10 +17,13 @@ public class InventoryService {
 
     private final InventoryRepository inventoryRepository;
     private final ProductService productService;
+    private final RedisStockService redisStockService;
 
-    public InventoryService(InventoryRepository inventoryRepository, ProductService productService) {
+    public InventoryService(InventoryRepository inventoryRepository, ProductService productService,
+            RedisStockService redisStockService) {
         this.inventoryRepository = inventoryRepository;
         this.productService = productService;
+        this.redisStockService = redisStockService;
     }
 
     public Inventory getInventory(Long id) {
@@ -37,7 +40,11 @@ public class InventoryService {
         Inventory inventory = new Inventory();
         inventory.setProduct(productService.getProduct(request.productId()));
         inventory.setStockQuantity(request.stockQuantity());
-        return inventoryRepository.save(inventory);
+        Inventory saved = inventoryRepository.save(inventory);
+        // Warm Redis now so the first orders don't all miss. If this is lost later,
+        // RedisStockService reloads it from Postgres on demand.
+        redisStockService.set(request.productId(), saved.getStockQuantity());
+        return saved;
     }
 
     @Transactional
@@ -54,9 +61,10 @@ public class InventoryService {
 
     @Transactional
     public void deleteInventory(Long id) {
-        if (!inventoryRepository.existsById(id)) {
-            throw new NotFoundException("Inventory " + id + " not found");
-        }
-        inventoryRepository.deleteById(id);
+        // Load the row (not just check it exists) because the Redis key needs its product id.
+        Inventory inventory = getInventory(id);
+        inventoryRepository.delete(inventory);
+        // Otherwise Redis keeps accepting orders for stock that no longer exists.
+        redisStockService.delete(inventory.getProduct().getId());
     }
 }
