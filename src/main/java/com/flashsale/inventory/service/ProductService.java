@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.flashsale.inventory.dto.ProductRequest;
+import com.flashsale.inventory.dto.ProductResponse;
 import com.flashsale.inventory.entity.Product;
 import com.flashsale.inventory.exception.NotFoundException;
 import com.flashsale.inventory.repository.ProductRepository;
@@ -23,6 +24,11 @@ public class ProductService {
     public Product getProduct(Long id) {
         return productRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Product " + id + " not found"));
+    }
+
+    // Placeholder: reads the database only. 5.4.2 adds the Redis cache here.
+    public ProductResponse getProductCached(Long id) {
+        return ProductResponse.from(getProduct(id));
     }
 
     public List<Product> getAllProducts() {
