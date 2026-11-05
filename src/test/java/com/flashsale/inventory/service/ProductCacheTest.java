@@ -3,6 +3,7 @@ package com.flashsale.inventory.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 import org.junit.jupiter.api.Test;
@@ -14,9 +15,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.flashsale.inventory.TestcontainersConfiguration;
 import com.flashsale.inventory.dto.ProductRequest;
+import com.flashsale.inventory.dto.ProductResponse;
 import com.flashsale.inventory.entity.Product;
 import com.flashsale.inventory.exception.NotFoundException;
 import com.flashsale.inventory.repository.ProductRepository;
+
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest
 @Import(TestcontainersConfiguration.class)
@@ -26,6 +30,7 @@ class ProductCacheTest {
     @Autowired ProductRepository productRepository;
     @Autowired StringRedisTemplate redis;
     @Autowired TransactionTemplate transactionTemplate;
+    @Autowired JsonMapper jsonMapper;
 
     @Test
     void secondReadComesFromCache() {
@@ -125,6 +130,24 @@ class ProductCacheTest {
         // Clearing after commit removes what that reader cached.
         assertThat(redis.hasKey(key)).as("cache key after commit").isFalse();
         assertThat(productService.getProductCached(id).productName()).isEqualTo("New name");
+    }
+
+    @Test
+    void secondDeleteClearsLateStaleWrite() throws InterruptedException {
+        Long id = saveProduct("Old name");
+        String key = "product:" + id;
+
+        productService.updateProduct(id, new ProductRequest("New name"));
+
+        // A slow reader read "Old name" before the commit and only writes it now,
+        // after the first delete already ran.
+        String stale = jsonMapper.writeValueAsString(new ProductResponse(id, "Old name"));
+        redis.opsForValue().set(key, stale, Duration.ofMinutes(30));
+
+        // Longer than the delay before the second delete.
+        Thread.sleep(1000);
+
+        assertThat(redis.hasKey(key)).as("stale cache key after the second delete").isFalse();
     }
 
     private Long saveProduct(String name) {
