@@ -1,11 +1,13 @@
 package com.flashsale.inventory.service;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -31,15 +33,18 @@ public class ProductService {
     // "Not in the database" is cached briefly, so a newly created product shows up soon.
     private static final Duration MISSING_TTL = Duration.ofSeconds(30);
     private static final String MISSING_MARKER = "";
+    private static final Duration SECOND_DELETE_DELAY = Duration.ofMillis(500);
 
     private final ProductRepository productRepository;
     private final StringRedisTemplate redis;
     private final JsonMapper jsonMapper;
+    private final TaskScheduler taskScheduler;
 
-    public ProductService(ProductRepository productRepository, StringRedisTemplate redis, JsonMapper jsonMapper) {
+    public ProductService(ProductRepository productRepository, StringRedisTemplate redis, JsonMapper jsonMapper, TaskScheduler taskScheduler) {
         this.productRepository = productRepository;
         this.redis = redis;
         this.jsonMapper = jsonMapper;
+        this.taskScheduler = taskScheduler;
     }
 
     // Returns the JPA entity, for other services that link to it (orders, inventory).
@@ -112,6 +117,7 @@ public class ProductService {
             @Override 
             public void afterCommit() {
                 redis.delete(KEY_PREFIX + id);
+                taskScheduler.schedule(() -> redis.delete(KEY_PREFIX + id), Instant.now().plus(SECOND_DELETE_DELAY));
             }
         });
     }
