@@ -8,6 +8,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.flashsale.inventory.dto.ProductRequest;
 import com.flashsale.inventory.dto.ProductResponse;
@@ -83,13 +85,16 @@ public class ProductService {
     public Product createProduct(ProductRequest request) {
         Product product = new Product();
         product.setProductName(request.productName());
-        return productRepository.save(product);
+        Product newProduct = productRepository.save(product);
+        evictAfterCommit(newProduct.getId());
+        return newProduct;
     }
 
     @Transactional
     public Product updateProduct(Long id, ProductRequest request) {
         Product product = getProduct(id);
         product.setProductName(request.productName());
+        evictAfterCommit(id);
         return productRepository.save(product);
     }
 
@@ -99,5 +104,15 @@ public class ProductService {
             throw new NotFoundException("Product " + id + " not found");
         }
         productRepository.deleteById(id);
+        evictAfterCommit(id);
+    }
+
+    private void evictAfterCommit(Long id) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override 
+            public void afterCommit() {
+                redis.delete(KEY_PREFIX + id);
+            }
+        });
     }
 }
