@@ -1,6 +1,7 @@
 package com.flashsale.inventory.service;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,6 +68,7 @@ public class OrderService {
                 order.setProduct(product);
                 order.setQuantity(quantity);
                 order.setStatus(OrderStatus.PENDING);
+                order.setOrderNo(UUID.randomUUID());
 
                 return orderRepository.save(order);
             });
