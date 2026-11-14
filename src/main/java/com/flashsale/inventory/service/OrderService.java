@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.flashsale.inventory.dto.OrderMessage;
 import com.flashsale.inventory.entity.Order;
 import com.flashsale.inventory.entity.OrderStatus;
 import com.flashsale.inventory.entity.Product;
@@ -77,5 +78,23 @@ public class OrderService {
             redisStockService.restore(productId, quantity);
             throw e;
         }
+    }
+
+    public Order createOrderFromMessage(OrderMessage message) {
+        return transactionTemplate.execute(status -> {
+            // The database check stays as the final guard in case Redis is out of sync.
+            inventoryService.decreaseStock(message.productId(), message.quantity());
+
+            Product product = productService.getProduct(message.productId());
+
+            Order order = new Order();
+            order.setUser(userRepository.getReferenceById(message.userId()));
+            order.setProduct(product);
+            order.setQuantity(message.quantity());
+            order.setStatus(OrderStatus.PENDING);
+            order.setOrderNo(message.orderNo());
+
+            return orderRepository.save(order);
+        });
     }
 }
