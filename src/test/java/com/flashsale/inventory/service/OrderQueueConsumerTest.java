@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.redis.connection.RedisListCommands.Direction;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
 import com.flashsale.inventory.TestcontainersConfiguration;
@@ -43,7 +44,8 @@ class OrderQueueConsumerTest {
 
     @BeforeEach
     void emptyQueues() {
-        redis.delete(List.of(RedisStockService.QUEUE_KEY, OrderQueueConsumer.PROCESSING_KEY));
+        redis.delete(List.of(RedisStockService.QUEUE_KEY, OrderQueueConsumer.PROCESSING_KEY,
+                OrderQueueConsumer.DEAD_KEY));
     }
 
     @AfterEach
@@ -100,6 +102,92 @@ class OrderQueueConsumerTest {
     }
 
     @Test
+    void failedOrderGivesRedisStockBack() {
+        Long userId = saveUser();
+        // Postgres has nothing left, but Redis still thinks there are 5: the "admin changed the
+        // stock in the database only" case. Redis lets the order through, the database refuses it.
+        Long productId = saveProductWithStock(0);
+        redisStockService.set(productId, 5);
+        OrderMessage message = new OrderMessage(UUID.randomUUID(), userId, productId, 1);
+
+        assertThat(redisStockService.tryDecreaseAndEnqueue(message)).isTrue();
+        assertThat(redisStock(productId)).as("Redis stock after queueing").isEqualTo("4");
+        consumer.start();
+
+        // The one Redis took for this order comes back.
+        await().atMost(Duration.ofSeconds(5)).until(() -> "5".equals(redisStock(productId)));
+
+        assertThat(orderRepository.findByOrderNo(message.orderNo())).as("order row").isEmpty();
+        assertThat(databaseStock(productId)).as("Postgres stock").isZero();
+        assertThat(redis.opsForList().size(OrderQueueConsumer.PROCESSING_KEY)).as("processing length").isZero();
+    }
+
+    @Test
+    void unreadableMessagesGoToDeadListAndConsumerKeepsGoing() {
+        Long userId = saveUser();
+        Long productId = saveProductWithStock(10);
+
+        // LPUSH adds on the left and the consumer takes from the right, so these two come out
+        // first, and the good order after them.
+        redis.opsForList().leftPush(RedisStockService.QUEUE_KEY, "not json");
+        redis.opsForList().leftPush(RedisStockService.QUEUE_KEY, "{}");
+        OrderMessage good = new OrderMessage(UUID.randomUUID(), userId, productId, 1);
+        assertThat(redisStockService.tryDecreaseAndEnqueue(good)).isTrue();
+        consumer.start();
+
+        // The good order still gets written: the bad ones did not kill the thread or block the queue.
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> orderRepository.findByOrderNo(good.orderNo()).isPresent());
+
+        assertThat(redis.opsForList().range(OrderQueueConsumer.DEAD_KEY, 0, -1))
+                .as("dead list").containsExactlyInAnyOrder("not json", "{}");
+        await().atMost(Duration.ofSeconds(2))
+                .until(() -> redis.opsForList().size(OrderQueueConsumer.PROCESSING_KEY) == 0);
+    }
+
+    @Test
+    void sameMessageTwiceMakesOneOrder() {
+        Long userId = saveUser();
+        Long productId = saveProductWithStock(10);
+        OrderMessage message = new OrderMessage(UUID.randomUUID(), userId, productId, 1);
+        assertThat(redisStockService.tryDecreaseAndEnqueue(message)).isTrue();
+
+        // Push the exact same JSON again, as if it had been requeued after a crash.
+        String json = redis.opsForList().index(RedisStockService.QUEUE_KEY, 0);
+        redis.opsForList().leftPush(RedisStockService.QUEUE_KEY, json);
+        consumer.start();
+
+        // Wait until both copies have been taken and dealt with.
+        await().atMost(Duration.ofSeconds(5)).until(() ->
+                redis.opsForList().size(RedisStockService.QUEUE_KEY) == 0
+                        && redis.opsForList().size(OrderQueueConsumer.PROCESSING_KEY) == 0);
+
+        assertThat(orderRepository.findByOrderNo(message.orderNo())).as("order row").isPresent();
+        // Taken once from each store. Without the "already exists?" check, the second copy would
+        // hit the UNIQUE constraint, count as a business failure and give the Redis stock back (10).
+        assertThat(databaseStock(productId)).as("Postgres stock").isEqualTo(9);
+        assertThat(redisStock(productId)).as("Redis stock").isEqualTo("9");
+    }
+
+    @Test
+    void messageLeftInProcessingIsPickedUpOnStart() {
+        Long userId = saveUser();
+        Long productId = saveProductWithStock(10);
+        OrderMessage message = new OrderMessage(UUID.randomUUID(), userId, productId, 1);
+        assertThat(redisStockService.tryDecreaseAndEnqueue(message)).isTrue();
+
+        // Do what BLMOVE does, then "crash": the message sits in processing with no worker on it.
+        redis.opsForList().move(RedisStockService.QUEUE_KEY, Direction.RIGHT,
+                OrderQueueConsumer.PROCESSING_KEY, Direction.LEFT);
+
+        consumer.start();
+
+        await().atMost(Duration.ofSeconds(5))
+                .until(() -> orderRepository.findByOrderNo(message.orderNo()).isPresent());
+        assertThat(databaseStock(productId)).as("Postgres stock").isEqualTo(9);
+    }
+
+    @Test
     void stopEndsTheWorkerThread() {
         consumer.start();
         assertThat(consumer.isRunning()).isTrue();
@@ -130,6 +218,10 @@ class OrderQueueConsumerTest {
         inventory.setStockQuantity(stock);
         inventoryRepository.save(inventory);
         return product.getId();
+    }
+
+    private String redisStock(Long productId) {
+        return redis.opsForValue().get("stock:" + productId);
     }
 
     private int databaseStock(Long productId) {

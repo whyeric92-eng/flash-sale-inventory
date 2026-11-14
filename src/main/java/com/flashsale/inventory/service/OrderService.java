@@ -1,6 +1,7 @@
 package com.flashsale.inventory.service;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -82,6 +83,10 @@ public class OrderService {
 
     public Order createOrderFromMessage(OrderMessage message) {
         return transactionTemplate.execute(status -> {
+            Optional<Order> existing = orderRepository.findByOrderNo(message.orderNo());
+            if (existing.isPresent()) {
+                return existing.get();
+            }
             // The database check stays as the final guard in case Redis is out of sync.
             inventoryService.decreaseStock(message.productId(), message.quantity());
 

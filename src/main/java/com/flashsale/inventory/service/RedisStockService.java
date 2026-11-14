@@ -25,6 +25,9 @@ public class RedisStockService {
     private static final RedisScript<Long> DECREASE_AND_ENQUEUE_SCRIPT =
             RedisScript.of(new ClassPathResource("scripts/decrease_stock_and_enqueue.lua"), Long.class);
 
+    private static final RedisScript<Long> RESTORE_AND_REMOVE_SCRIPT =
+            RedisScript.of(new ClassPathResource("scripts/restore_stock_and_remove.lua"), Long.class);
+
     // Public so the consumer (6.3) can read from the same list.
     public static final String QUEUE_KEY = "order:queue";
 
@@ -66,6 +69,13 @@ public class RedisStockService {
     // Gives stock back after the database part of an order failed.
     public void restore(Long productId, int quantity) {
         redis.opsForValue().increment(key(productId), quantity);
+    }
+
+    // For the queue consumer: an order failed for good, so give its stock back and remove its
+    // message from `listKey` atomically (see the script for why it must be one step).
+    public void restoreAndRemove(Long productId, int quantity, String listKey, String json) {
+        redis.execute(RESTORE_AND_REMOVE_SCRIPT, List.of(key(productId), listKey),
+                String.valueOf(quantity), json);
     }
 
     public void set(Long productId, int stock) {
