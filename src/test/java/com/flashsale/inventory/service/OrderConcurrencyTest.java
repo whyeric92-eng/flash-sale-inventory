@@ -1,7 +1,9 @@
 package com.flashsale.inventory.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -11,6 +13,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -34,11 +38,24 @@ import com.flashsale.inventory.repository.UserRepository;
 class OrderConcurrencyTest {
 
     @Autowired OrderService orderService;
+    @Autowired OrderQueueConsumer consumer;
     @Autowired UserRepository userRepository;
     @Autowired ProductRepository productRepository;
     @Autowired InventoryRepository inventoryRepository;
     @Autowired OrderRepository orderRepository;
     @Autowired StringRedisTemplate redis;
+
+    @BeforeEach
+    void emptyQueues() {
+        redis.delete(List.of(RedisStockService.QUEUE_KEY, OrderQueueConsumer.PROCESSING_KEY));
+    }
+
+    @AfterEach
+    void stopConsumer() {
+        if (consumer.isRunning()) {
+            consumer.stop();
+        }
+    }
 
     @Test
     void concurrentOrdersDoNotOversell() throws Exception {
@@ -87,13 +104,25 @@ class OrderConcurrencyTest {
             f.get();
         }
 
-        int stockLeft = inventoryRepository.findByProductId(productId).orElseThrow().getStockQuantity();
+        // Phase 1, the requests: Redis decides who gets stock. Exactly `stock` win, the rest get 409.
         assertThat(success.get()).as("orders that succeeded").isEqualTo(stock);
         assertThat(conflict.get()).as("orders rejected for low stock").isEqualTo(threads - stock);
-        assertThat(stockLeft).as("stock left").isZero();
-        assertThat(orderRepository.count()).as("orders saved").isEqualTo(stock);
-        // Redis started empty (inventory was saved directly, not via createInventory), so all
-        // threads raced to load it. A wrong load would overwrite decreases and leave this above 0.
+        // Redis started empty (inventory was saved directly), so all threads raced to load it.
+        // A wrong load would overwrite decreases and leave this above 0.
         assertThat(redis.opsForValue().get("stock:" + productId)).as("stock left in Redis").isEqualTo("0");
+        // Nothing has touched the database yet: the winners are only on the queue.
+        assertThat(redis.opsForList().size(RedisStockService.QUEUE_KEY)).as("queued orders").isEqualTo(stock);
+        assertThat(databaseStock(productId)).as("Postgres stock before the consumer runs").isEqualTo(stock);
+
+        // Phase 2, the consumer: it writes every queued order, and the database ends up matching Redis.
+        consumer.start();
+        await().atMost(Duration.ofSeconds(10))
+                .until(() -> orderRepository.countByProductId(productId) == stock);
+
+        assertThat(databaseStock(productId)).as("Postgres stock left").isZero();
+    }
+
+    private int databaseStock(Long productId) {
+        return inventoryRepository.findByProductId(productId).orElseThrow().getStockQuantity();
     }
 }

@@ -1,6 +1,7 @@
 package com.flashsale.inventory.entity;
 
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import org.hibernate.annotations.Generated;
 
@@ -43,6 +44,9 @@ public class Order {
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
+    @Column(name = "order_no", nullable = false, unique = true, updatable = false)
+    private UUID orderNo;
+
     public Long getId() {
         return id;
     }
@@ -81,5 +85,13 @@ public class Order {
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public void setOrderNo(UUID orderNo) {
+        this.orderNo = orderNo;
+    }
+
+    public UUID getOrderNo() {
+        return orderNo;
     }
 }
