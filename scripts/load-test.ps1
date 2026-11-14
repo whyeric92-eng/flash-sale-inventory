@@ -29,6 +29,9 @@ Invoke-Sql "TRUNCATE orders RESTART IDENTITY; UPDATE inventory SET stock_quantit
 # Redis is a separate copy and must be reset too. SET (not DEL) models a sale whose stock was warmed up beforehand.
 docker exec $RedisContainer redis-cli SET $RedisKey $Stock | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'redis-cli failed' }
+# Queue state from earlier runs (stage 6). Harmless on the synchronous version, where these never exist.
+docker exec $RedisContainer redis-cli DEL order:queue order:processing order:dead | Out-Null
+docker exec $RedisContainer sh -c "redis-cli --scan --pattern 'order:status:*' | xargs -r redis-cli DEL" | Out-Null
 
 # 2. Log in
 $auth = @{ username = 'tester'; password = 'password123' } | ConvertTo-Json
@@ -44,11 +47,26 @@ $result = oha -n $Requests -c $Concurrency --no-tui --output-format json -m POST
     ConvertFrom-Json
 if ($LASTEXITCODE -ne 0) { throw 'oha failed' }
 
-# 4. Reconcile
+# 4. Wait for the queue consumer (stage 6): requests only queue the orders, so the database is
+#    behind until the queue and the processing list are empty. On the synchronous version this
+#    finishes at once.
+function Get-QueueLength {
+    $queued = [int](docker exec $RedisContainer redis-cli LLEN order:queue)
+    $working = [int](docker exec $RedisContainer redis-cli LLEN order:processing)
+    return $queued + $working
+}
+$drain = [Diagnostics.Stopwatch]::StartNew()
+while ((Get-QueueLength) -gt 0) {
+    if ($drain.Elapsed.TotalSeconds -gt 300) { throw 'queue did not drain within 5 minutes' }
+    Start-Sleep -Milliseconds 100
+}
+$drain.Stop()
+
+# 5. Reconcile
 $stockLeft, $orders, $sold = (Invoke-Sql "SELECT (SELECT stock_quantity FROM inventory WHERE product_id = $ProductId), COUNT(*), COALESCE(SUM(quantity), 0) FROM orders;").Split(',')
 $oversold = [int]$sold - $Stock
 
-# 5. Report
+# 6. Report
 $codes = ($result.statusCodeDistribution.PSObject.Properties | Sort-Object Name |
     ForEach-Object { "$($_.Name) x $($_.Value)" }) -join ', '
 
@@ -58,6 +76,8 @@ Write-Host "  sold:         $sold"
 Write-Host "  stock left:   $stockLeft (Redis: $(docker exec $RedisContainer redis-cli GET $RedisKey))"
 Write-Host ('  rps:          {0:N0}' -f $result.summary.requestsPerSec)
 Write-Host ('  avg latency:  {0:N1} ms' -f ($result.summary.average * 1000))
+Write-Host ('  p99 latency:  {0:N1} ms' -f ($result.latencyPercentiles.p99 * 1000))
+Write-Host ('  queue drain:  {0:N2} s after the last response' -f $drain.Elapsed.TotalSeconds)
 if ($oversold -gt 0) {
     Write-Host "  OVERSOLD by $oversold" -ForegroundColor Red
 } else {
