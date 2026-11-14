@@ -91,7 +91,7 @@ class OrderConcurrencyTest {
         assertThat(success.get()).as("orders that succeeded").isEqualTo(stock);
         assertThat(conflict.get()).as("orders rejected for low stock").isEqualTo(threads - stock);
         assertThat(stockLeft).as("stock left").isZero();
-        assertThat(orderRepository.count()).as("orders saved").isEqualTo(stock);
+        assertThat(orderRepository.countByProductId(productId)).as("orders saved").isEqualTo(stock);
         // Redis started empty (inventory was saved directly, not via createInventory), so all
         // threads raced to load it. A wrong load would overwrite decreases and leave this above 0.
         assertThat(redis.opsForValue().get("stock:" + productId)).as("stock left in Redis").isEqualTo("0");
