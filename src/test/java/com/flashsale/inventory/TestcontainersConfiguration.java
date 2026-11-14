@@ -20,8 +20,11 @@ public class TestcontainersConfiguration {
 
     // Testcontainers has no dedicated Redis class here, so use a generic container.
     // name = "redis" tells Spring which kind of connection this container provides.
+    // "resource": the IDE sees a Closeable that is never closed, but Spring owns this bean and
+    // calls close() (stopping the container) when the test context shuts down.
     @Bean
     @ServiceConnection(name = "redis")
+    @SuppressWarnings("resource")
     GenericContainer<?> redis() {
         return new GenericContainer<>(DockerImageName.parse("redis:7.4-alpine")).withExposedPorts(6379);
     }
