@@ -142,7 +142,7 @@ public class OrderQueueConsumer implements SmartLifecycle {
             redis.opsForList().remove(PROCESSING_KEY, 1, json);
         } catch (ConflictException | NotFoundException | DataIntegrityViolationException e) {
             log.warn("Order {} failed for good, stock given back", message.orderNo(), e);
-            redisStockService.restoreAndRemove(message.productId(), message.quantity(), PROCESSING_KEY, json);
+            redisStockService.restoreAndRemove(message, PROCESSING_KEY, json);
         } catch (RuntimeException e) {
             retryLater(json, e);
         }

@@ -1,6 +1,7 @@
 package com.flashsale.inventory.controller;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.flashsale.inventory.dto.CreateOrderRequest;
 import com.flashsale.inventory.dto.OrderResponse;
+import com.flashsale.inventory.dto.OrderStatusResponse;
 import com.flashsale.inventory.service.OrderService;
 
 import jakarta.validation.Valid;
@@ -41,9 +43,16 @@ public class OrderController {
     }
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public OrderResponse createOrder(@AuthenticationPrincipal Long userId,
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public OrderStatusResponse createOrder(@AuthenticationPrincipal Long userId,
             @Valid @RequestBody CreateOrderRequest request) {
-        return OrderResponse.from(orderService.createOrder(userId, request.productId(), request.quantity()));
+        UUID orderNo = orderService.createOrder(userId, request.productId(), request.quantity());
+        return new OrderStatusResponse(orderNo, "QUEUED", null);
+    }
+
+    @GetMapping("/no/{orderNo}")
+    public OrderStatusResponse getOrderStatus(@AuthenticationPrincipal Long userId, 
+            @PathVariable UUID orderNo) {
+        return orderService.getOrderStatus(orderNo, userId);
     }
 }

@@ -9,6 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.flashsale.inventory.dto.OrderMessage;
+import com.flashsale.inventory.dto.OrderResponse;
+import com.flashsale.inventory.dto.OrderStatusResponse;
 import com.flashsale.inventory.entity.Order;
 import com.flashsale.inventory.entity.OrderStatus;
 import com.flashsale.inventory.entity.Product;
@@ -17,7 +19,7 @@ import com.flashsale.inventory.exception.NotFoundException;
 import com.flashsale.inventory.repository.OrderRepository;
 import com.flashsale.inventory.repository.UserRepository;
 
-// No class-level @Transactional: createOrder must run with no transaction scope at all (see below).
+// No class-level @Transactional: each method sets up its own.
 @Service
 public class OrderService {
 
@@ -51,34 +53,29 @@ public class OrderService {
         return orderRepository.findByUserIdOrderByCreatedAtDesc(userId);
     }
 
-    // Deliberately not @Transactional (not even NOT_SUPPORTED, which holds a DB connection for
-    // the whole method and deadlocked the pool). The transaction is only the execute() block below.
-    public Order createOrder(Long userId, Long productId, Integer quantity) {
-        if (!redisStockService.tryDecrease(productId, quantity)) {
+    // CREATED once the consumer has written it; QUEUED or FAILED while only Redis knows it.
+    // Another user's order number gives 404, like getOrder.
+    @Transactional(readOnly = true)
+    public OrderStatusResponse getOrderStatus(UUID orderNo, Long userId) {
+        Optional<Order> order = orderRepository.findByOrderNoAndUserId(orderNo, userId);
+        if (order.isPresent()) {
+            return new OrderStatusResponse(orderNo, "CREATED", OrderResponse.from(order.get()));
+        }
+        return redisStockService.findQueueStatus(orderNo, userId)
+                .map(status -> new OrderStatusResponse(orderNo, status, null))
+                .orElseThrow(() -> new NotFoundException("Order " + orderNo + " not found"));
+    }
+
+    // Redis only: take the stock and queue the order. The consumer writes it to the database.
+    public UUID createOrder(Long userId, Long productId, Integer quantity) {
+        UUID orderNo = UUID.randomUUID();
+
+        OrderMessage message = new OrderMessage(orderNo, userId, productId, quantity);
+
+        if (!redisStockService.tryDecreaseAndEnqueue(message)) {
             throw new ConflictException("Insufficient stock");
         }
-        try {
-            return transactionTemplate.execute(status -> {
-                // The database check stays as the final guard in case Redis is out of sync.
-                inventoryService.decreaseStock(productId, quantity);
-
-                Product product = productService.getProduct(productId);
-
-                Order order = new Order();
-                // Reference only: the id comes from a verified token, and the FK rejects unknown users.
-                order.setUser(userRepository.getReferenceById(userId));
-                order.setProduct(product);
-                order.setQuantity(quantity);
-                order.setStatus(OrderStatus.PENDING);
-                order.setOrderNo(UUID.randomUUID());
-
-                return orderRepository.save(order);
-            });
-        } catch (RuntimeException e) {
-            // Redis is not part of the database transaction, so undo its decrease by hand.
-            redisStockService.restore(productId, quantity);
-            throw e;
-        }
+        return orderNo;
     }
 
     public Order createOrderFromMessage(OrderMessage message) {
